@@ -1,7 +1,6 @@
 import re
 from datasets import Dataset
 
-
 def add_markers(original_sentence, new_sentences):
     blank_location = original_sentence.find('BLANK')
 
@@ -23,8 +22,26 @@ def add_markers(original_sentence, new_sentences):
 
     return marked_sentences
 
+def add_marker_crowspairs(sentence1, sentence2):
+    str1 = re.findall(r'\b\w+\b', sentence1)
+    str2 = re.findall(r'\b\w+\b', sentence2)
 
-def prepare_text_specific(data):
+    common_word = [x for x in str1 if x in str2]
+
+    def add_marker(sentence, common_word):
+        words = []
+        for match in re.finditer(r'\b\w+\b|\S', sentence):
+            word = match.group()
+            if word in common_word or not word.isalpha():
+                words.append(word)
+            else:
+                words.append("===" + word + "===")
+        return ' '.join(words)
+    new_str1 = add_marker(sentence1, common_word)
+    new_str2 = add_marker(sentence2, common_word)
+    return new_str1, new_str2
+
+def prepare_text_single(data):
     new_data = []
     for item in data:
         text = item['text']
@@ -58,9 +75,10 @@ def prepare_text_specific(data):
         new_data.append(new_item)
     return new_data
 
-def prepare_text_all(data):
+def prepare_text_multiple(data, bias_type=None):
+    if bias_type is None:
+        bias_type = ["gender", "race", "profession", "religion"]
     new_data = []
-    bias_type = ["gender","race","profession","religion"]
     for type_bias in bias_type:
         for item in data[type_bias]:
             text = item['text']

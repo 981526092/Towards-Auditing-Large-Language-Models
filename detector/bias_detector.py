@@ -64,7 +64,7 @@ class Detector:
         self.class_labels = list(set([item['entity'] for item in dummy_output])) if self.classifier == 'Token' else list(set([item['label'].split('__')[-1] for item in dummy_output]))
 
     @torch.no_grad()
-    def predict(self, texts: List[str]) -> List[Dict[str, float]]:
+    def predict(self, texts: List[str]):
         """
         Predicts the bias of the given text or list of texts.
 
