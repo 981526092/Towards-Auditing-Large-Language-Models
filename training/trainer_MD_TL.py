@@ -1,10 +1,9 @@
 import argparse
-
 import numpy as np
 from transformers import AutoTokenizer, DataCollatorForTokenClassification, AutoModelForTokenClassification, \
     TrainingArguments, Trainer
-
-from training import prepare_text_multiple, prepare_dataset, load_data_local, load_data_crowspairs
+from dataloader import load_data_local, load_data_crowspairs
+from preprocessing import prepare_text_multiple, prepare_dataset
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, balanced_accuracy_score
 
 

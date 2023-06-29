@@ -3,8 +3,8 @@ from sklearn.metrics import precision_recall_fscore_support, balanced_accuracy_s
 from transformers import AutoTokenizer, TrainingArguments, Trainer, AutoModelForTokenClassification, \
     DataCollatorForTokenClassification
 import argparse
-from training import prepare_text_single, prepare_dataset, load_data_local, load_data_crowspairs
-
+from preprocessing import prepare_text_single, prepare_dataset
+from dataloader import load_data_local, load_data_crowspairs
 
 def train_SD_TL(new_data, model_path, bias_type, batch_size,epoch, learning_rate,output_dir):
     id2label = {

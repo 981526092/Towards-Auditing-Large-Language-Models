@@ -1,11 +1,11 @@
 import argparse
-
 import numpy as np
 import pandas as pd
 from sklearn.metrics import precision_recall_fscore_support, balanced_accuracy_score
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, TrainingArguments, Trainer
 from datasets import Dataset
-from training import prepare_MD_SL_data, load_data_local, load_data_crowspairs
+from preprocessing import prepare_MD_SL_data
+from dataloader import load_data_local, load_data_crowspairs
 
 
 def train_MD_SL(data, model_path, batch_size, epoch, learning_rate, output_dir):

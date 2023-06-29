@@ -5,7 +5,7 @@ from sklearn.metrics import precision_recall_fscore_support, balanced_accuracy_s
 from transformers import AutoTokenizer, TrainingArguments, Trainer
 from datasets import Dataset
 from transformers import AutoModelForSequenceClassification
-from training import load_data_crowspairs,load_data_local
+from dataloader import load_data_crowspairs,load_data_local
 
 
 def train_SD_SL(new_data, model_path, bias_type, batch_size,epoch, learning_rate,output_dir):
@@ -101,7 +101,7 @@ def main():
         else:
             new_data.extend(intrasentence_dataset[args.bias_type].copy())
 
-    if "crowspairs" in args.dataset_select:
+    if "crowspairs" in args.dataset_select[0]:
         crowspairs_dataset = load_data_crowspairs(marked=False)
         mask_bias_type = args.bias_type
         if args.bias_type == "race":
