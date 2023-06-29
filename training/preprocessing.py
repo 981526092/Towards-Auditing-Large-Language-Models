@@ -167,3 +167,43 @@ def prepare_dataset(tokenizer, data):
     tokenized_data = hf_dataset.map(tokenize_and_align_labels, batched=True)
 
     return tokenized_data
+
+def prepare_MD_SL_data(new_data):
+    bias_type = ["gender","profession","race","religion"]
+    return_data = []
+    for type_bias in bias_type:
+        set = new_data[type_bias]
+        for entry in set:
+            label = entry["label"]
+            text = entry["text"]
+            new_label = 0
+            if label == 0 or label == 1:
+                if (type_bias == "gender"):
+                    if(label == 0):
+                        new_label = 1
+                    else:
+                        new_label = 2
+                if (type_bias == "race"):
+                    if(label == 0):
+                        new_label = 3
+                    else:
+                        new_label = 4
+                if (type_bias == "profession"):
+                    if(label == 0):
+                        new_label = 5
+                    else:
+                        new_label = 6
+                if (type_bias == "religion"):
+                    if(label == 0):
+                        new_label = 7
+                    else:
+                        new_label = 8
+            else:
+                new_label = 0  # non-bias token with label 'unrelated'
+
+            new_item = {
+            'text': text,
+            'label': new_label
+            }
+            return_data.append(new_item)
+    return return_data
