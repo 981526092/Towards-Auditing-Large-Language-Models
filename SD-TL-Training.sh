@@ -3,7 +3,7 @@
 # Declare variables
 MODEL_PATH='distilbert-base-uncased'
 BIAS_TYPE='religion'
-DATASET_SELECT='intersentence'
+DATASET_SELECT='intersentence intrasentence crowspairs'
 BATCH_SIZE=16
 EPOCH=6
 LEARNING_RATE=2e-5
