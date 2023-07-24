@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 import argparse
@@ -5,12 +7,26 @@ from sklearn.metrics import precision_recall_fscore_support, balanced_accuracy_s
 from transformers import AutoTokenizer, TrainingArguments, Trainer
 from datasets import Dataset
 from transformers import AutoModelForSequenceClassification
-from training import load_data_crowspairs,load_data_local
+from dataloader import load_data_crowspairs,load_data_local
 
 
-def train_SD_SL(new_data, model_path, bias_type, batch_size,epoch, learning_rate,output_dir):
-    model = AutoModelForSequenceClassification.from_pretrained(model_path, num_labels=3)
+def train_SD_SL(new_data, model_path, bias_type, batch_size,epoch, learning_rate,output_dir,seed):
+
+    id2label = {
+        0: "unrelated",
+        1: "stereotype",
+        2: "anti-stereotype",
+    }
+    label2id = {
+        "unrelated": 0,
+        "stereotype": 1,
+        "anti-stereotype": 2,
+    }
+
+    model = AutoModelForSequenceClassification.from_pretrained(model_path, num_labels=3, id2label=id2label,
+                                                               label2id=label2id)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
+
 
     def tokenize_function(examples):
         return tokenizer(examples["text"], padding="max_length", truncation=True, max_length=512)
@@ -18,13 +34,12 @@ def train_SD_SL(new_data, model_path, bias_type, batch_size,epoch, learning_rate
     # Convert the list of dictionaries into a datasets object
     temp_data = Dataset.from_pandas(pd.DataFrame(new_data))
 
-    temp_data = temp_data.shuffle(seed=42)
     # Tokenize the datasets
     tokenized_datasets = temp_data.map(tokenize_function, batched=True)
 
     # Convert the 'label' column to a list
     tokenized_datasets = tokenized_datasets.map(lambda examples: {'labels': [examples['label']]})
-    final_dataset = tokenized_datasets.train_test_split(test_size=0.2)
+    final_dataset = tokenized_datasets.train_test_split(test_size=0.2, shuffle=True,seed=seed)
 
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
@@ -47,7 +62,6 @@ def train_SD_SL(new_data, model_path, bias_type, batch_size,epoch, learning_rate
         final_dir = output_dir
 
     training_args = TrainingArguments(
-        #use_mps_device=True,
         output_dir=final_dir,
         num_train_epochs=epoch,
         evaluation_strategy="epoch",
@@ -58,7 +72,7 @@ def train_SD_SL(new_data, model_path, bias_type, batch_size,epoch, learning_rate
         save_strategy="epoch",
         load_best_model_at_end=True,
         save_total_limit=1)
-
+    model = model.to("mps")
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -70,6 +84,10 @@ def train_SD_SL(new_data, model_path, bias_type, batch_size,epoch, learning_rate
 
     trainer.train()
     result = trainer.evaluate(final_dataset["test"])
+    print(result)
+
+    with open(final_dir + '/result.json', 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=4)
 
     return result
 
@@ -83,6 +101,7 @@ def main():
     parser.add_argument('--epoch', type=int, default=6, help='Number of epochs')
     parser.add_argument('--learning_rate', type=float, default=2e-5, help='Learning rate')
     parser.add_argument('--output_dir', type=str, default=None, help='Save Directory')
+    parser.add_argument('--seed', type=int, default=66, help='Seed')
 
     args = parser.parse_args()
 
@@ -111,7 +130,7 @@ def main():
         else:
             new_data.extend(crowspairs_dataset[mask_bias_type].copy())
 
-    result = train_SD_SL(new_data, args.model_path, args.bias_type, args.batch_size, args.epoch, args.learning_rate,args.output_dir)
+    result = train_SD_SL(new_data, args.model_path, args.bias_type, args.batch_size, args.epoch, args.learning_rate,args.output_dir,args.seed)
     print(result)
 
 if __name__ == '__main__':

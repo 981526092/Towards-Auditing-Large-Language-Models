@@ -1,9 +1,7 @@
-
-
-import json
+import time
 import torch
-from transformers import pipeline, AutoModelForTokenClassification, AutoTokenizer
-from typing import List, Dict
+import requests
+from typing import List
 
 class Detector:
     """
@@ -21,23 +19,26 @@ class Detector:
         """
         self.device = device if device is not None else (0 if torch.cuda.is_available() else -1)
 
-        # Maps classifiers to their available models and class_names
+        # Maps classifiers to their available models
         self.classifier_model_mapping = {
-            "Token": {
-                "All": "wu981526092/token-level-bias-detector",
-                "Specific": "unitary/unbiased-toxic-roberta",
-            },
-            "Sentence": {
-                "single": "cardiffnlp/roberta-large-tweet-topic-single-all",
-                "multi": "cardiffnlp/twitter-roberta-base-dec2021-tweet-topic-multi-all",
-            },
-            "Dialogue": {
-                "deberta": "JasperLS/deberta-v3-base-injection",
-                "gelectra": "JasperLS/gelectra-base-injection",
-            },
+                "Token": {
+                    "All": "wu981526092/Token-Level-Multidimensional-Bias-Detector",
+                    "Race": "wu981526092/Token-Level-Race-Bias-Detector",
+                    "Gender": "wu981526092/Token-Level-Gender-Bias-Detector",
+                    "Profession": "wu981526092/Token-Level-Profession-Bias-Detector",
+                    "Religion": "wu981526092/Token-Level-Religion-Bias-Detector",
+                },
+                "Sentence": {
+                    "All":"wu981526092/Sentence-Level-Multidimensional-Bias-Detector",
+                    "Religion": "wu981526092/Sentence-Level-Religion-Bias-Detector",
+                    "Profession": "wu981526092/Sentence-Level-Profession-Bias-Detector",
+                    "Race": "wu981526092/Sentence-Level-Race-Bias-Detector",
+                    "Gender": "wu981526092/Sentence-Level-Gender-Bias-Detector",
+                }
         }
 
         self.classifier = classifier
+        self.model_type = model_type
 
         if classifier not in self.classifier_model_mapping:
             raise ValueError(f"Invalid classifier. Expected one of: {list(self.classifier_model_mapping.keys())}")
@@ -48,22 +49,31 @@ class Detector:
 
         self.model_path = self.classifier_model_mapping[classifier][model_type]
 
-        try:
-            model = AutoModelForTokenClassification.from_pretrained(self.model_path)
-            tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-            if self.classifier == 'Token':
-                self.pipe = pipeline("ner", model=model, tokenizer=tokenizer, device=self.device)
-            else:
-                self.pipe = pipeline("text-classification", model=model, tokenizer=tokenizer, device=self.device)
-        except Exception as e:
-            print("Failed to initialize the pipeline")
-            raise e
+        # Create the API endpoint from the model path
+        self.API_URL = f"https://api-inference.huggingface.co/models/{self.model_path}"
+        API_token = "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"
+        # Add authorization token (if required)
+        self.headers = {"Authorization": f"Bearer {API_token}"} # Replace `your_api_token` with your token
 
-        # Fetch the class labels by making a dummy prediction
-        dummy_output = self.pipe("dummy text")
-        self.class_labels = list(set([item['entity'] for item in dummy_output])) if self.classifier == 'Token' else list(set([item['label'].split('__')[-1] for item in dummy_output]))
+    import time
 
-    @torch.no_grad()
+    def query(self, payload):
+        response = requests.post(self.API_URL, headers=self.headers, json=payload).json()
+
+        # If the model is loading, wait for the estimated time and retry
+        while 'error' in response and 'estimated_time' in response:
+            print(f"Model is currently loading. Waiting for {response['estimated_time']} seconds.")
+            time.sleep(response['estimated_time'])
+
+            # Retry the request
+            print("Retrying the request...")
+            response = requests.post(self.API_URL, headers=self.headers, json=payload).json()
+
+        if 'error' in response:
+            raise RuntimeError(f"Error: {response['error']}")
+
+        return response
+
     def predict(self, texts: List[str]):
         """
         Predicts the bias of the given text or list of texts.
@@ -79,8 +89,12 @@ class Detector:
 
         results = []
 
+        # Prepare the payload
+        payload = {"inputs": texts}
+
+        # Query the API
         try:
-            predictions = self.pipe(texts)
+            predictions = self.query(payload)
         except RuntimeError as e:
             print("Prediction failed due to a RuntimeError")
             raise e
@@ -88,19 +102,30 @@ class Detector:
             print("Prediction failed due to an unknown error")
             raise e
 
+        # Process the predictions
         for text, prediction in zip(texts, predictions):
-            result = {}
-            if self.classifier == 'Token':
-                for item in prediction:
-                    # Include the token in the result
-                    result[item['word']] = {item['entity']: item['score']}
+            # Check if an error occurred while loading the model
+            if 'error' in prediction:
+                print(f"Error for text '{text}': {prediction['error']}")
+                results.append({text: {'error': prediction['error']}})
             else:
-                result = {item['label'].split('__')[-1]: item['score'] for item in prediction}
-            results.append({text: result})
+                result = {}
+                if self.classifier == 'Token':
+                    for item in prediction:
+                        result[item['word']] = {item['entity_group']: item['score']}
+                elif self.classifier == 'Sentence' and self.model_type == 'All':
+                    result = {item['label'].split('__')[-1]: item['score'] for item in
+                              prediction}
+                else:
+                    result = {item['label'].split('__')[-1]: item['score'] for item in
+                              prediction}
+                results.append({text: result})
 
         return results
 
 
 if __name__ == '__main__':
-    detector_test = Detector("Token","All")
-    print(detector_test.predict(["this is a test message","tasdasda"]))
+    detector_test = Detector("Sentence","All")
+    test_data = ["The girl performed poorly at reading in school.","Sir is an address showing respect for a person. It usually refers to a male."]
+    result = detector_test.predict(test_data)
+    print(result[1][test_data[1]])

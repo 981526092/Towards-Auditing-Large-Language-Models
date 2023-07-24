@@ -1,17 +1,19 @@
 import argparse
+import json
+
 import numpy as np
 from transformers import AutoTokenizer, DataCollatorForTokenClassification, AutoModelForTokenClassification, \
     TrainingArguments, Trainer
-from training import load_data_local, load_data_crowspairs
-from training import prepare_text_multiple, prepare_dataset
+from dataloader import load_data_local, load_data_crowspairs
+from preprocessing import prepare_text_multiple, prepare_dataset
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score, balanced_accuracy_score
 
 
-def train_MD_TL(new_data, model_path, batch_size, epoch, learning_rate, output_dir):
+def train_MD_TL(new_data, model_path, batch_size, epoch, learning_rate, output_dir,seed):
     data = prepare_text_multiple(new_data)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     tokenized_data = prepare_dataset(tokenizer, data)
-    final_dataset = tokenized_data.train_test_split(0.2, shuffle=True)
+    final_dataset = tokenized_data.train_test_split(0.2, shuffle=True,seed = seed)
 
     # Define data collator to handle padding
     data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
@@ -88,7 +90,6 @@ def train_MD_TL(new_data, model_path, batch_size, epoch, learning_rate, output_d
         final_dir = output_dir
 
     training_args = TrainingArguments(
-        #use_mps_device=True,
         output_dir=final_dir,
         learning_rate=learning_rate,
         per_device_train_batch_size=batch_size,
@@ -100,7 +101,7 @@ def train_MD_TL(new_data, model_path, batch_size, epoch, learning_rate, output_d
         load_best_model_at_end=True,
         save_total_limit=1
     )
-
+    model = model.to("mps")
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -117,6 +118,9 @@ def train_MD_TL(new_data, model_path, batch_size, epoch, learning_rate, output_d
 
     print(result)
 
+    with open(final_dir + '/result.json', 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=4)
+
     return result
 
 
@@ -129,6 +133,7 @@ def main():
     parser.add_argument('--epoch', type=int, default=6, help='Number of epochs')
     parser.add_argument('--learning_rate', type=float, default=2e-5, help='Learning rate')
     parser.add_argument('--output_dir', type=str, default=None, help='Save Directory')
+    parser.add_argument('--seed', type=int, default=66, help='Seed')
 
     args = parser.parse_args()
 
@@ -141,12 +146,18 @@ def main():
 
     if "crowspairs" in args.dataset_select:
         crowspairs_dataset = load_data_crowspairs(marked=True)
-        new_data['race'].extend(crowspairs_dataset['race-color'])
-        new_data['gender'].extend(crowspairs_dataset['gender'])
-        new_data['religion'].extend(crowspairs_dataset['religion'])
+        if new_data is None:
+            new_data = crowspairs_dataset.copy()
+            new_data['race'] = new_data['race-color']
+            del new_data['race-color']
+            new_data['profession'] = []
+        else:
+            new_data['race'].extend(crowspairs_dataset['race-color'])
+            new_data['gender'].extend(crowspairs_dataset['gender'])
+            new_data['religion'].extend(crowspairs_dataset['religion'])
 
 
-    result = train_MD_TL(new_data, args.model_path, args.batch_size, args.epoch, args.learning_rate,args.output_dir)
+    result = train_MD_TL(new_data, args.model_path, args.batch_size, args.epoch, args.learning_rate,args.output_dir,args.seed)
     print(result)
 
 if __name__ == '__main__':

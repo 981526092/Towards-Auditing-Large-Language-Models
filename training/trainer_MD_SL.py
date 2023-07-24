@@ -1,15 +1,41 @@
 import argparse
+import json
+
 import numpy as np
 import pandas as pd
 from sklearn.metrics import precision_recall_fscore_support, balanced_accuracy_score
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, TrainingArguments, Trainer
 from datasets import Dataset
-from training import prepare_MD_SL_data
-from training import load_data_local, load_data_crowspairs
+from preprocessing import prepare_MD_SL_data
+from dataloader import load_data_local, load_data_crowspairs
 
 
-def train_MD_SL(data, model_path, batch_size, epoch, learning_rate, output_dir):
-    model = AutoModelForSequenceClassification.from_pretrained(model_path, num_labels=9)
+def train_MD_SL(data, model_path, batch_size, epoch, learning_rate, output_dir,seed):
+    id2label = {
+        0: "unrelated",
+        1: "stereotype_gender",
+        2: "anti-stereotype_gender",
+        3: "stereotype_race",
+        4: "anti-stereotype_race",
+        5: "stereotype_profession",
+        6: "anti-stereotype_profession",
+        7: "stereotype_religion",
+        8: "anti-stereotype_religion",
+
+    }
+    label2id = {
+        "unrelated": 0,
+        "stereotype_gender": 1,
+        "anti-stereotype_gender": 2,
+        "stereotype_race": 3,
+        "anti-stereotype_race": 4,
+        "stereotype_profession": 5,
+        "anti-stereotype_profession": 6,
+        "stereotype_religion": 7,
+        "anti-stereotype_religion": 8,
+    }
+
+    model = AutoModelForSequenceClassification.from_pretrained(model_path, num_labels=9,id2label=id2label, label2id=label2id)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
 
     def tokenize_function(examples):
@@ -20,13 +46,12 @@ def train_MD_SL(data, model_path, batch_size, epoch, learning_rate, output_dir):
 
     temp_data = Dataset.from_pandas(pd.DataFrame(new_data))
 
-    temp_data = temp_data.shuffle(seed=42)
     # Tokenize the datasets
     tokenized_datasets = temp_data.map(tokenize_function, batched=True)
 
     # Convert the 'label' column to a list
     tokenized_datasets = tokenized_datasets.map(lambda examples: {'labels': [examples['label']]})
-    final_dataset = tokenized_datasets.train_test_split(test_size=0.2)
+    final_dataset = tokenized_datasets.train_test_split(test_size=0.2, shuffle=True, seed = seed)
 
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
@@ -49,7 +74,6 @@ def train_MD_SL(data, model_path, batch_size, epoch, learning_rate, output_dir):
         final_dir = output_dir
 
     training_args = TrainingArguments(
-        #use_mps_device=True,
         output_dir=final_dir,
         num_train_epochs=epoch,
         evaluation_strategy="epoch",
@@ -60,7 +84,7 @@ def train_MD_SL(data, model_path, batch_size, epoch, learning_rate, output_dir):
         save_strategy="epoch",
         load_best_model_at_end=True,
         save_total_limit=1)
-
+    model = model.to("mps")
     trainer = Trainer(
         model=model,
         tokenizer=tokenizer,
@@ -74,6 +98,9 @@ def train_MD_SL(data, model_path, batch_size, epoch, learning_rate, output_dir):
     result = trainer.evaluate(final_dataset["test"])
     print(result)
 
+    with open(final_dir + '/result.json', 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=4)
+
     return result
 
 # The main function that will be called when the script is executed
@@ -85,16 +112,16 @@ def main():
     parser.add_argument('--epoch', type=int, default=6, help='Number of epochs')
     parser.add_argument('--learning_rate', type=float, default=2e-5, help='Learning rate')
     parser.add_argument('--output_dir', type=str, default=None, help='Save Directory')
+    parser.add_argument('--seed', type=int, default=66, help='Seed')
+
 
     args = parser.parse_args()
 
-    new_data = None
 
     intersentence_dataset = load_data_local("intersentence")
 
     bias_type = ["gender", "race", "profession", "religion", ]
 
-    new_data = None
     new_data = intersentence_dataset.copy()
     if "intrasentence" in args.dataset_select:
         intrasentence_dataset = load_data_local("intrasentence", marked=False)
@@ -106,7 +133,7 @@ def main():
         new_data["race"].extend(crowspairs_dataset["race-color"])
         new_data["religion"].extend(crowspairs_dataset["religion"])
 
-    result = train_MD_SL(new_data, args.model_path, args.batch_size, args.epoch, args.learning_rate,args.output_dir)
+    result = train_MD_SL(new_data, args.model_path, args.batch_size, args.epoch, args.learning_rate,args.output_dir,args.seed)
     print(result)
 
 if __name__ == '__main__':

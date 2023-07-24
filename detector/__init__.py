@@ -1,1 +1,1 @@
-from .bias_detector import detector
+from .bias_detector import Detector

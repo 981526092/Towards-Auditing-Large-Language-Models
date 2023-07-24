@@ -90,7 +90,7 @@ def load_data(type,marked = True):
 
     return result_dataset
 
-def load_data_local(type,data_path='../bias_detector/data/',marked = True):
+def load_data_local(type,data_path='/Users/zekunwu/Desktop/bias_detector/data/',marked = True):
 
     f = open(data_path+'test.json')
     test_data = json.load(f)
@@ -162,9 +162,9 @@ def load_data_local(type,data_path='../bias_detector/data/',marked = True):
     return result_dataset
 
 
-def load_data_crowspairs(data_path = "../bias_detector/data/crows_pairs_anonymized.csv",marked = True):
+def load_data_crowspairs(data_path = "/Users/zekunwu/Desktop/bias_detector/data/",marked = True):
 
-    crows_pair = pd.read_csv(data_path)
+    crows_pair = pd.read_csv(data_path+"crows_pairs_anonymized.csv")
     crows_pair = crows_pair.drop(columns=["annotations","anon_writer","anon_annotators"])
     bias_types = list(crows_pair["bias_type"].unique())
 
@@ -188,12 +188,12 @@ def load_data_crowspairs(data_path = "../bias_detector/data/crows_pairs_anonymiz
             entry1["text"] = sent1
             entry1["label"] = 0
             entry2["text"] = sent2
-            entry2["label"] = 1
+            entry2["label"] = 0
         elif label == "antistereo":
             entry1["text"] = sent1
             entry1["label"] = 1
             entry2["text"] = sent2
-            entry2["label"] = 0
+            entry2["label"] = 1
         else:
             print(f"Unexpected label value: {label}")
             continue
