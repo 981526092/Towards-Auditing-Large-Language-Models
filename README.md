@@ -38,4 +38,3 @@ To train a single-dimensional classifier at the token level, run:
 ```bash
 bash SD-TL-Training.sh
 ```
-```
